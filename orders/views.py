@@ -1,5 +1,6 @@
-import uuid
+# orders/views.py
 
+import uuid
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
@@ -16,7 +17,6 @@ sq_client = Square(
     token=settings.SQUARE_ACCESS_TOKEN,
 )
 
-
 class OrderCreate(View):
     def get(self, request):
         form = OrderForm()
@@ -27,12 +27,12 @@ class OrderCreate(View):
         if form.is_valid():
             order = form.save(commit=False)
 
-            # Build a single line item; adjust amount as needed (in cents)
+            # Build your line item (amount in cents)
             line_items = [{
                 "name": f"Honeybee Order #{order.id or 'new'}",
                 "quantity": "1",
                 "base_price_money": {
-                    "amount": 1000,       # e.g. $10.00
+                    "amount": 1000,
                     "currency": "USD"
                 }
             }]
@@ -47,7 +47,6 @@ class OrderCreate(View):
                 "redirect_url": request.build_absolute_uri('/success/')
             }
 
-            # Create the checkout session
             response = sq_client.checkout.create_checkout(
                 location_id=settings.SQUARE_LOCATION_ID,
                 body=body
@@ -59,11 +58,10 @@ class OrderCreate(View):
                 order.save()
                 return redirect(checkout['checkout_page_url'])
             else:
-                # Pass Square errors back to template
-                errors = response.errors
+                # put any returned errors into the template
                 return render(request, 'orders/order_form.html', {
                     'form': form,
-                    'errors': errors
+                    'errors': response.errors,
                 })
 
         return render(request, 'orders/order_form.html', {'form': form})
