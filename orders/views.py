@@ -1,19 +1,19 @@
 import uuid
-
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
 
-from square.client import Client
+from square import Square
+from square.environment import SquareEnvironment
+
 from .forms import OrderForm
 from .models import Order
 
-# initialize the Square client
-sq_client = Client(
-    access_token=settings.SQUARE_ACCESS_TOKEN,
-    environment="sandbox"  # change to "production" when you’re ready
+# Initialize the Square client
+sq_client = Square(
+    environment=SquareEnvironment.SANDBOX,
+    token=settings.SQUARE_ACCESS_TOKEN,
 )
-
 
 class OrderCreate(View):
     def get(self, request):
@@ -25,40 +25,43 @@ class OrderCreate(View):
         if not form.is_valid():
             return render(request, 'orders/order_form.html', {'form': form})
 
-        # save the order to get an ID
         order = form.save(commit=False)
-        order.save()
-
-        # build the payment‐link body
-        idempotency_key = str(uuid.uuid4())
+        # Build your order payload
         body = {
-            "idempotency_key": idempotency_key,
-            "quick_pay": {
-                "name": f"Honeybee Order #{order.id}",
-                "price_money": {"amount": 1000, "currency": "USD"},
+            "idempotency_key": str(uuid.uuid4()),
+            "order": {
                 "location_id": settings.SQUARE_LOCATION_ID,
+                "line_items": [{
+                    "name": f"Honeybee Order #{order.id or 'new'}",
+                    "quantity": "1",
+                    "base_price_money": {
+                        "amount": 1000,    # in cents, so $10.00
+                        "currency": "USD"
+                    }
+                }]
+            },
+            "checkout_options": {
+                "redirect_url": request.build_absolute_uri('/success/')
             }
         }
 
-        # call the Payment Links API
+        # Create a Payment Link (replaces the old create_checkout)
         response = sq_client.payment_links.create_payment_link(body)
 
         if response.is_success():
-            link = response.body['payment_link']
-            order.checkout_id = link['id']
+            link = response.body['payment_link']['url']
+            order.checkout_url = link  # you may want to store this
             order.save()
-            return redirect(link['url'])
+            return redirect(link)
         else:
-            # show any errors back in the form
+            # Pass any API errors back to the template
             return render(request, 'orders/order_form.html', {
                 'form': form,
-                'errors': response.errors
+                'errors': response.errors,
             })
-
 
 def success(request):
     return render(request, 'orders/order_success.html')
-
 
 def cancel(request):
     return render(request, 'orders/order_cancel.html')
