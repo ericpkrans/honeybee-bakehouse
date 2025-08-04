@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Place Your Order | Honeybee Bakehouse</title>
+</head>
+<body>
+  <h1>Honeybee Bakehouse</h1>
+  <p>Cupcakes &amp; cookies made with love, by a Southern mama.</p>
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for err in errors %}
+          <li>{{ err.detail }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post">{% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Pay &amp; Place Order</button>
+  </form>
+
+  <footer>
+    <small>Made with love. 🐝</small><br>
+    <small>Operated under the Nebraska Cottage Food Law.</small><br>
+    <small>This food was prepared in a kitchen not subject to regulation or inspection by the state regulatory authority and may contain allergens.</small>
+  </footer>
+</body>
+</html>
