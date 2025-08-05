@@ -3,13 +3,13 @@ import uuid
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
-from square.client import Client
+from square.client import client
 
 from .forms import OrderForm
 from .models import Order
 
 # initialize the Square client
-sq_client = Client(
+sq_client = client(
     access_token=settings.SQUARE_ACCESS_TOKEN,
     environment="sandbox"  # or "production" when you go live
 )
