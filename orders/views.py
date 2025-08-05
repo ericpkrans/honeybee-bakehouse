@@ -26,7 +26,7 @@ class OrderCreate(View):
             return render(request, 'orders/order_form.html', {'form': form})
 
         order = form.save(commit=False)
-        order.save()  # so order.id exists
+        order.save()
 
         checkout_body = {
             "idempotency_key": str(uuid.uuid4()),
@@ -35,15 +35,26 @@ class OrderCreate(View):
                 "line_items": [{
                     "name": f"Honeybee Order #{order.id}",
                     "quantity": "1",
-                    "base_price_money": {
-                        "amount": 1000,    # in cents, so $10.00
-                        "currency": "USD"
-                    }
+                    "base_price_money": {"amount": 1000, "currency": "USD"}
                 }]
             },
             "ask_for_shipping_address": False,
             "redirect_url": request.build_absolute_uri('/success/')
         }
+
+        # <-- use payment_links, not checkout
+        response = sq_client.payment_links.create_payment_link(body=checkout_body)
+
+        if response.is_success():
+            payment_link = response.body['payment_link']
+            order.checkout_id = payment_link['id']
+            order.save()
+            return redirect(payment_link['url'])
+
+        return render(request, 'orders/order_form.html', {
+            'form': form,
+            'errors': response.errors
+        })
 
         # ← CALL THE NEW METHOD create_payment_link
         response = sq_client.checkout.create_payment_link(body=checkout_body)
