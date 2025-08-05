@@ -26,6 +26,12 @@ class OrderCreate(View):
         order = form.save(commit=False)
         order.save()
 
+        # … after order.save()
+        order.checkout_id = 'DEMO'
+        order.save()
+        return redirect('/success/')
+
+
         # initialize Square client
         client = Client(
             access_token=settings.SQUARE_ACCESS_TOKEN,
