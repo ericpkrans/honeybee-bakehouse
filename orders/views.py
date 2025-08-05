@@ -2,15 +2,13 @@ import uuid
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
-
-# use the top-level Square entrypoint, not square.client.Client
 from square import Square
 from square.environment import SquareEnvironment
 
 from .forms import OrderForm
 from .models import Order
 
-# initialize your Square client
+# initialize the Square client
 sq_client = Square(
     environment=SquareEnvironment.SANDBOX,
     token=settings.SQUARE_ACCESS_TOKEN,
@@ -27,7 +25,7 @@ class OrderCreate(View):
             return render(request, 'orders/order_form.html', {'form': form})
 
         order = form.save(commit=False)
-        order.save()  # so order.id exists
+        order.save()  # now order.id exists
 
         checkout_body = {
             "idempotency_key": str(uuid.uuid4()),
@@ -37,7 +35,7 @@ class OrderCreate(View):
                     "name": f"Honeybee Order #{order.id}",
                     "quantity": "1",
                     "base_price_money": {
-                        "amount": 1000,    # $10.00
+                        "amount": 1000,     # in cents ($10.00)
                         "currency": "USD"
                     }
                 }]
@@ -46,7 +44,6 @@ class OrderCreate(View):
             "redirect_url": request.build_absolute_uri('/success/')
         }
 
-        # call the Checkout API
         response = sq_client.checkout.create_checkout(
             location_id=settings.SQUARE_LOCATION_ID,
             body=checkout_body
@@ -57,12 +54,12 @@ class OrderCreate(View):
             order.checkout_id = checkout['id']
             order.save()
             return redirect(checkout['checkout_page_url'])
-
-        # on error, re-render form with errors
-        return render(request, 'orders/order_form.html', {
-            'form': form,
-            'errors': response.errors
-        })
+        else:
+            # render form again with any Square errors
+            return render(request, 'orders/order_form.html', {
+                'form': form,
+                'errors': response.errors
+            })
 
 def success(request):
     return render(request, 'orders/success.html')
