@@ -2,15 +2,14 @@ import uuid
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
-from square import Square
-from square.environment import SquareEnvironment
+from square.client import Client
 from .forms import OrderForm
 from .models import Order
 
 # init the client
-sq_client = Square(
-    environment=SquareEnvironment.SANDBOX,
-    token=settings.SQUARE_ACCESS_TOKEN,
+sq_client = Client(
+    access_token=settings.SQUARE_ACCESS_TOKEN,
+    environment="sandbox",
 )
 
 class OrderCreate(View):
