@@ -1,18 +1,18 @@
 import uuid
+
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
 
-from square import Square
-from square.environment import SquareEnvironment
+from square.client import Client
 
 from .forms import OrderForm
 from .models import Order
 
-# Initialize the Square client
-sq_client = Square(
-    environment=SquareEnvironment.SANDBOX,
-    token=settings.SQUARE_ACCESS_TOKEN,
+# Initialize Square client
+sq_client = Client(
+    access_token=settings.SQUARE_ACCESS_TOKEN,
+    environment="sandbox"  # or "production" if you’ve switched your tokens
 )
 
 class OrderCreate(View):
@@ -22,46 +22,54 @@ class OrderCreate(View):
 
     def post(self, request):
         form = OrderForm(request.POST)
-        if not form.is_valid():
-            return render(request, 'orders/order_form.html', {'form': form})
+        if form.is_valid():
+            # Save the order (to get an ID for the line item name)
+            order = form.save(commit=False)
+            order.save()
 
-        order = form.save(commit=False)
-        # Build your order payload
-        body = {
-            "idempotency_key": str(uuid.uuid4()),
-            "order": {
-                "location_id": settings.SQUARE_LOCATION_ID,
-                "line_items": [{
-                    "name": f"Honeybee Order #{order.id or 'new'}",
-                    "quantity": "1",
-                    "base_price_money": {
-                        "amount": 1000,    # in cents, so $10.00
-                        "currency": "USD"
-                    }
-                }]
-            },
-            "checkout_options": {
+            line_items = [{
+                "name": f"Honeybee Order #{order.id}",
+                "quantity": "1",
+                "base_price_money": {
+                    "amount": 1000,    # $10.00 in cents
+                    "currency": "USD"
+                }
+            }]
+
+            body = {
+                "idempotency_key": str(uuid.uuid4()),
+                "order": {
+                    "location_id": settings.SQUARE_LOCATION_ID,
+                    "line_items": line_items,
+                },
+                "ask_for_shipping_address": False,
                 "redirect_url": request.build_absolute_uri('/success/')
             }
-        }
 
-        # Create a Payment Link (replaces the old create_checkout)
-        response = sq_client.payment_links.create_payment_link(body)
+            # Create a checkout session
+            response = sq_client.checkout.create_checkout(
+                location_id=settings.SQUARE_LOCATION_ID,
+                body=body
+            )
 
-        if response.is_success():
-            link = response.body['payment_link']['url']
-            order.checkout_url = link  # you may want to store this
-            order.save()
-            return redirect(link)
-        else:
-            # Pass any API errors back to the template
-            return render(request, 'orders/order_form.html', {
-                'form': form,
-                'errors': response.errors,
-            })
+            if response.is_success():
+                checkout = response.body['checkout']
+                order.checkout_id = checkout['id']
+                order.save()
+                return redirect(checkout['checkout_page_url'])
+            else:
+                # Show any Square errors
+                return render(request, 'orders/order_form.html', {
+                    'form': form,
+                    'errors': response.errors
+                })
+
+        return render(request, 'orders/order_form.html', {'form': form})
+
 
 def success(request):
-    return render(request, 'orders/order_success.html')
+    return render(request, 'orders/success.html')
+
 
 def cancel(request):
-    return render(request, 'orders/order_cancel.html')
+    return render(request, 'orders/cancel.html')
