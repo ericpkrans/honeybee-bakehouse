@@ -1,27 +1,21 @@
+# orders/views.py
+
 from django.shortcuts import render, redirect
-from django.views import View
+from django.urls import reverse_lazy
+from django.views.generic import FormView, TemplateView
+
 from .forms import OrderForm
+from .models import Order
 
-class OrderCreate(View):
-    template_name = 'orders/order_form.html'
+class OrderCreate(FormView):
+    template_name = "orders/order_form.html"
+    form_class = OrderForm
+    success_url = reverse_lazy("order_success")
 
-    def get(self, request):
-        return render(request, self.template_name, {'form': OrderForm()})
-
-    def post(self, request):
-        form = OrderForm(request.POST)
-        if not form.is_valid():
-            return render(request, self.template_name, {'form': form})
-
-        # simply save the order
+    def form_valid(self, form):
+        # save the Order to the database
         form.save()
-        return redirect('orders:success')
+        return super().form_valid(form)
 
-
-def success(request):
-    return render(request, 'orders/success.html')
-
-
-def cancel(request):
-    # you can retire this if you never need it
-    return render(request, 'orders/cancel.html')
+class OrderSuccess(TemplateView):
+    template_name = "orders/success.html"
