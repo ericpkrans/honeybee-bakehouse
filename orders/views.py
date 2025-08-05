@@ -1,44 +1,32 @@
 # orders/views.py
 
 import uuid
-
-from django.conf import settings
+import requests
 from django.shortcuts import render, redirect
 from django.views import View
-
-from square.client import Client
+from django.conf import settings
 
 from .forms import OrderForm
 from .models import Order
 
+# Base URL for Square’s REST API
+SQUARE_API_BASE = "https://connect.squareup.com"
 
 class OrderCreate(View):
     def get(self, request):
         form = OrderForm()
-        return render(request, 'orders/order_form.html', {'form': form})
+        return render(request, "orders/order_form.html", {"form": form})
 
     def post(self, request):
         form = OrderForm(request.POST)
         if not form.is_valid():
-            return render(request, 'orders/order_form.html', {'form': form})
+            return render(request, "orders/order_form.html", {"form": form})
 
-        # save a stub Order so we have an ID to show on the Square page
+        # Save the order so we have an order.id
         order = form.save(commit=False)
         order.save()
 
-        # … after order.save()
-        order.checkout_id = 'DEMO'
-        order.save()
-        return redirect('/success/')
-
-
-        # initialize Square client
-        client = Client(
-            access_token=settings.SQUARE_ACCESS_TOKEN,
-            environment='sandbox'  # or 'production'
-        )
-
-        # build the Payment Link request
+        # Build the Checkout API payload
         body = {
             "idempotency_key": str(uuid.uuid4()),
             "order": {
@@ -54,30 +42,44 @@ class OrderCreate(View):
                     }
                 ]
             },
-            "checkout_options": {
-                "redirect_url": request.build_absolute_uri('/success/'),
-                "ask_for_shipping_address": False
-            }
+            "ask_for_shipping_address": False,
+            "redirect_url": request.build_absolute_uri("/success/")
         }
 
-        # call the Payment Links API
-        resp = client.payment_links.create_payment_link(body)
-        if resp.is_success():
-            link = resp.body['payment_link']['url']
-            order.checkout_id = resp.body['payment_link']['id']
-            order.save()
-            return redirect(link)
+        headers = {
+            "Authorization": f"Bearer {settings.SQUARE_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
 
-        # on error, show them back the form with Square’s errors
-        return render(request, 'orders/order_form.html', {
-            'form': form,
-            'errors': resp.errors
+        # Call the Checkout API
+        url = f"{SQUARE_API_BASE}/v2/locations/{settings.SQUARE_LOCATION_ID}/checkouts"
+        resp = requests.post(url, json=body, headers=headers)
+
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            checkout = data.get("checkout")
+            if checkout:
+                # Persist the checkout ID and redirect user
+                order.checkout_id = checkout.get("id")
+                order.save()
+                return redirect(checkout.get("checkout_page_url"))
+
+        # On error, pull out any errors returned and show them on the form
+        try:
+            errors = resp.json().get("errors", [])
+        except ValueError:
+            errors = [{"detail": "Unable to create checkout link."}]
+
+        return render(request, "orders/order_form.html", {
+            "form": form,
+            "errors": errors
         })
 
 
 def success(request):
-    return render(request, 'orders/success.html')
+    return render(request, "orders/success.html")
 
 
 def cancel(request):
-    return render(request, 'orders/cancel.html')
+    return render(request, "orders/cancel.html")
