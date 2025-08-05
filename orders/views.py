@@ -7,9 +7,9 @@ from .forms import OrderForm
 from .models import Order
 
 # init the client
-sq_client = Client(
-    access_token=settings.SQUARE_ACCESS_TOKEN,
-    environment="sandbox",
+client = Client(
+  access_token="ACCESS_TOKEN",
+  environment="sandbox"
 )
 
 class OrderCreate(View):
