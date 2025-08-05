@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
 
-# use the new Square SDK
+# New SDK entrypoint
 from square import Square
 from square.environment import SquareEnvironment
 
@@ -12,8 +12,8 @@ from .models import Order
 
 # initialize your Square client
 sq_client = Square(
-    token=settings.SQUARE_ACCESS_TOKEN,
-    environment=SquareEnvironment.SANDBOX  # or PRODUCTION when you go live
+    environment=SquareEnvironment.SANDBOX,          # or PRODUCTION
+    token=settings.SQUARE_ACCESS_TOKEN,             # use `token=…` here
 )
 
 class OrderCreate(View):
@@ -26,7 +26,7 @@ class OrderCreate(View):
             return render(request, 'orders/order_form.html', {'form': form})
 
         order = form.save(commit=False)
-        order.save()  # now order.id exists
+        order.save()  # so order.id exists
 
         checkout_body = {
             "idempotency_key": str(uuid.uuid4()),
@@ -45,20 +45,16 @@ class OrderCreate(View):
             "redirect_url": request.build_absolute_uri('/success/')
         }
 
-        # call the Checkout API
-        # Note: in the new SDK .checkout is already available
-        response = sq_client.checkout.create_checkout(
-            location_id=settings.SQUARE_LOCATION_ID,
-            body=checkout_body
-        )
+        # ← CALL THE NEW METHOD create_payment_link
+        response = sq_client.checkout.create_payment_link(body=checkout_body)
 
         if response.is_success():
-            checkout = response.body['checkout']
-            order.checkout_id = checkout['id']
+            payment_link = response.body['payment_link']
+            order.checkout_id = payment_link['id']
             order.save()
-            return redirect(checkout['checkout_page_url'])
+            return redirect(payment_link['url'])
 
-        # on error, re‐render form with errors
+        # on error, render form with errors
         return render(request, 'orders/order_form.html', {
             'form':   form,
             'errors': response.errors
