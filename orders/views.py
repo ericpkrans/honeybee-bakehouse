@@ -6,8 +6,8 @@ from django.views import View
 from django.conf import settings
 
 # NOTE: we’re importing from the squareup package (your requirements.txt)
-from squareup.client import Client
-from squareup.environment import Environment
+from square.client import Client
+from square.environment import Environment
 
 from .forms import OrderForm
 from .models import Order
