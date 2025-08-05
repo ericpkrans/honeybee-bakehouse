@@ -2,19 +2,24 @@ import uuid
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
-from square.client import Client
+
+# use the top-level Square entrypoint, not square.client.Client
+from square import Square
+from square.environment import SquareEnvironment
+
 from .forms import OrderForm
 from .models import Order
 
-# initialize the Square client
-sq_client = Client(
-    access_token=settings.SQUARE_ACCESS_TOKEN,
-    environment="sandbox"  # or "production"
+# initialize your Square client
+sq_client = Square(
+    environment=SquareEnvironment.SANDBOX,
+    token=settings.SQUARE_ACCESS_TOKEN,
 )
 
 class OrderCreate(View):
     def get(self, request):
-        return render(request, 'orders/order_form.html', {'form': OrderForm()})
+        form = OrderForm()
+        return render(request, 'orders/order_form.html', {'form': form})
 
     def post(self, request):
         form = OrderForm(request.POST)
@@ -22,7 +27,7 @@ class OrderCreate(View):
             return render(request, 'orders/order_form.html', {'form': form})
 
         order = form.save(commit=False)
-        order.save()
+        order.save()  # so order.id exists
 
         checkout_body = {
             "idempotency_key": str(uuid.uuid4()),
@@ -32,7 +37,7 @@ class OrderCreate(View):
                     "name": f"Honeybee Order #{order.id}",
                     "quantity": "1",
                     "base_price_money": {
-                        "amount": 1000,   # e.g. $10.00
+                        "amount": 1000,    # $10.00
                         "currency": "USD"
                     }
                 }]
@@ -41,6 +46,7 @@ class OrderCreate(View):
             "redirect_url": request.build_absolute_uri('/success/')
         }
 
+        # call the Checkout API
         response = sq_client.checkout.create_checkout(
             location_id=settings.SQUARE_LOCATION_ID,
             body=checkout_body
@@ -52,15 +58,14 @@ class OrderCreate(View):
             order.save()
             return redirect(checkout['checkout_page_url'])
 
+        # on error, re-render form with errors
         return render(request, 'orders/order_form.html', {
-            'form':   form,
+            'form': form,
             'errors': response.errors
         })
 
-
 def success(request):
     return render(request, 'orders/success.html')
-
 
 def cancel(request):
     return render(request, 'orders/cancel.html')
