@@ -46,13 +46,15 @@ class OrderCreate(View):
         }
 
         # call the new Payment Links API
-        response = sq_client.payment_links.create_payment_link(body=body)
-
-        if response.is_success():
-            link = response.body['payment_link']
-            order.checkout_id = link['id']
+        resp = sq_client.payment_links.create_payment_link(body=body)
+        if resp.is_success():
+            link = resp.body["payment_link"]["url"]
+            link_id = resp.body["payment_link"]["id"]
+            order.checkout_id = link_id
+            order.payment_link_url = link
             order.save()
-            return redirect(link['url'])
+            return redirect(link)
+
 
         # on error, put errors back into the form
         return render(request, 'orders/order_form.html', {
