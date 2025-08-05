@@ -63,8 +63,19 @@ WSGI_APPLICATION = 'honeybee.wsgi.application'
 
 
 # 7. Use dj-database-url to parse DATABASE_URL from .env
+import os
+from pathlib import Path
+from decouple import config
+import dj_database_url
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# pick up DATABASE_URL from .env if present, otherwise use a SQLite file beside manage.py
 DATABASES = {
-    'default': dj_database_url.config(default=config('DATABASE_URL'))
+    'default': dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+    )
 }
 
 
