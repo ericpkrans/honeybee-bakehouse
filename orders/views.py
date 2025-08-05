@@ -1,20 +1,16 @@
 import uuid
-
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
-
 from square.client import Client
-
 from .forms import OrderForm
 from .models import Order
 
-# initialize your Square client
+# initialize the Square client
 sq_client = Client(
     access_token=settings.SQUARE_ACCESS_TOKEN,
-    environment="sandbox"  # change to "production" when you go live
+    environment="sandbox"  # swap to "production" when you go live
 )
-
 
 class OrderCreate(View):
     def get(self, request):
@@ -26,38 +22,38 @@ class OrderCreate(View):
         if not form.is_valid():
             return render(request, 'orders/order_form.html', {'form': form})
 
-        # save the order so we have an order.id
+        # save the order so we have an ID
         order = form.save(commit=False)
         order.save()
 
-        # build the Payment Link payload
-        payload = {
+        # build your payment link request
+        body = {
             "idempotency_key": str(uuid.uuid4()),
             "quick_pay": {
                 "name": f"Honeybee Order #{order.id}",
                 "price_money": {
-                    "amount": 1000,      # $10.00 in cents
+                    "amount": 1000,     #  $10.00
                     "currency": "USD"
-                }
-            },
-            "checkout_options": {
-                "redirect_url": request.build_absolute_uri('/success/')
+                },
+                "location_id": settings.SQUARE_LOCATION_ID
             }
         }
 
-        # create a hosted payment link
-        response = sq_client.payment_links.create_payment_link(body=payload)
+        # call the Payment Links API
+        result = sq_client.payment_links.create_payment_link(body)
 
-        if response.is_success():
-            link_url = response.body['payment_link']['url']
-            # you can store link_url on order if you want:
-            # order.checkout_url = link_url; order.save()
-            return redirect(link_url)
+        if result.is_success():
+            link = result.body['payment_link']
+            # store the link ID if you want to look it up later
+            order.checkout_id = link['id']
+            order.save()
+            # redirect the customer to Square’s hosted payment page
+            return redirect(link['url'])
 
-        # render errors back to the form
+        # on error, re-render form with any messages
         return render(request, 'orders/order_form.html', {
-            'form': form,
-            'errors': response.errors
+            'form':   form,
+            'errors': result.errors
         })
 
 
