@@ -1,17 +1,12 @@
-import os
-from pathlib import Path
+from pathlib import Path  
+from decouple import config  
+import dj_database_url  
 
-# 1. Add these imports at the top:
-from decouple import config
-import dj_database_url
+SECRET_KEY          = config('SECRET_KEY')  
+DEBUG               = config('DEBUG', default=False, cast=bool)  
+SQUARE_ACCESS_TOKEN = config('SQUARE_ACCESS_TOKEN')  
+SQUARE_LOCATION_ID  = config('SQUARE_LOCATION_ID')  
 
-# 2. Read secrets & Square creds from .env:
-SECRET_KEY           = config('SECRET_KEY')
-DEBUG                = config('DEBUG', default=False, cast=bool)
-SQUARE_ACCESS_TOKEN  = config('SQUARE_ACCESS_TOKEN')
-SQUARE_LOCATION_ID   = config('SQUARE_LOCATION_ID')
-
-# 3. Base directory:
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 4. Allow all hosts for now:
@@ -61,14 +56,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'honeybee.wsgi.application'
 
-
-# 7. Use dj-database-url to parse DATABASE_URL from .env
-import os
-from pathlib import Path
-from decouple import config
-import dj_database_url
-
-BASE_DIR = Path(__file__).resolve().parent.parent
 
 # pick up DATABASE_URL from .env if present, otherwise use a SQLite file beside manage.py
 DATABASES = {
