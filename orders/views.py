@@ -2,77 +2,64 @@ import uuid
 from django.shortcuts import render, redirect
 from django.views import View
 from django.conf import settings
-
-# New SDK entrypoint
-from square import Square
-from square.environment import SquareEnvironment
-
+from square.client import Client
 from .forms import OrderForm
 from .models import Order
 
-# initialize your Square client
-sq_client = Square(
-    environment=SquareEnvironment.SANDBOX,          # or PRODUCTION
-    token=settings.SQUARE_ACCESS_TOKEN,             # use `token=…` here
+# initialize the Square client
+sq_client = Client(
+    access_token=settings.SQUARE_ACCESS_TOKEN,
+    environment="sandbox"  # or "production"
 )
 
 class OrderCreate(View):
     def get(self, request):
-        return render(request, 'orders/order_form.html', {'form': OrderForm()})
+        form = OrderForm()
+        return render(request, "orders/order_form.html", {"form": form})
 
     def post(self, request):
         form = OrderForm(request.POST)
         if not form.is_valid():
-            return render(request, 'orders/order_form.html', {'form': form})
+            return render(request, "orders/order_form.html", {"form": form})
 
         order = form.save(commit=False)
-        order.save()
+        order.save()  # need order.id for the link name
 
-        checkout_body = {
+        # build the payment link request
+        link_body = {
             "idempotency_key": str(uuid.uuid4()),
-            "order": {
-                "location_id": settings.SQUARE_LOCATION_ID,
-                "line_items": [{
-                    "name": f"Honeybee Order #{order.id}",
-                    "quantity": "1",
-                    "base_price_money": {"amount": 1000, "currency": "USD"}
-                }]
+            "quick_pay": {
+                "name": f"Honeybee Order #{order.id}",
+                "price_money": {
+                    "amount": 1000,   # $10.00 in cents
+                    "currency": "USD"
+                },
+                "location_id": settings.SQUARE_LOCATION_ID
             },
-            "ask_for_shipping_address": False,
-            "redirect_url": request.build_absolute_uri('/success/')
+            "checkout_options": {
+                "redirect_url": request.build_absolute_uri("/success/")
+            }
         }
 
-        # <-- use payment_links, not checkout
-        response = sq_client.payment_links.create_payment_link(body=checkout_body)
+        # call the Payment Links API
+        response = sq_client.payment_links.create_payment_link(link_body)
 
         if response.is_success():
-            payment_link = response.body['payment_link']
-            order.checkout_id = payment_link['id']
+            payment_link = response.body["payment_link"]
+            order.checkout_id = payment_link["id"]
             order.save()
-            return redirect(payment_link['url'])
+            return redirect(payment_link["url"])
 
-        return render(request, 'orders/order_form.html', {
-            'form': form,
-            'errors': response.errors
+        # render errors back to the form
+        return render(request, "orders/order_form.html", {
+            "form": form,
+            "errors": response.errors
         })
 
-        # ← CALL THE NEW METHOD create_payment_link
-        response = sq_client.checkout.create_payment_link(body=checkout_body)
-
-        if response.is_success():
-            payment_link = response.body['payment_link']
-            order.checkout_id = payment_link['id']
-            order.save()
-            return redirect(payment_link['url'])
-
-        # on error, render form with errors
-        return render(request, 'orders/order_form.html', {
-            'form':   form,
-            'errors': response.errors
-        })
 
 def success(request):
-    return render(request, 'orders/success.html')
+    return render(request, "orders/success.html")
+
 
 def cancel(request):
-    return render(request, 'orders/cancel.html')
+    return render(request, "orders/cancel.html")
